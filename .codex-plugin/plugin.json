@@ -1,0 +1,26 @@
+{
+  "name": "steward",
+  "version": "0.1.0+codex.20260918000000",
+  "description": "管家账本：工作区回执 + 情况汇报的事件账本（ShadowRoom Music）",
+  "author": {
+    "name": "ShadowRoom Music",
+    "email": "support@shadowroom.cn",
+    "url": "https://shadowroom.cn"
+  },
+  "homepage": "https://shadowroom.cn",
+  "repository": "https://github.com/shadowroommusic/steward",
+  "license": "AGPL-3.0",
+  "keywords": ["mcp", "ledger", "events", "orb", "butler", "shadowroom"],
+  "interface": {
+    "displayName": "管家账本",
+    "shortDescription": "悬浮球（管家）的记事本：工作区只交回执，管家随时汇报。",
+    "longDescription": "只增不改的事件账本：report_done 收工作区回执，recent_events 拉明细，situation_report 汇报最近关键事件/未解决的问题/活跃工作区，focus_change 记录切页面与切工程。injectable=false 的进度事件进日志不进简报，保证管家的上下文有界。账本在 ~/Documents/ShadowRoom/_steward/ledger.db。",
+    "developerName": "ShadowRoom Music",
+    "category": "Music",
+    "capabilities": ["ledger", "events", "situation-report"],
+    "websiteURL": "https://shadowroom.cn/tools",
+    "brandColor": "#0B0B0F",
+    "defaultPrompt": "现在什么情况？"
+  },
+  "mcpServers": "./.mcp.json"
+}

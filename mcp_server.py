@@ -123,17 +123,65 @@ def tool_focus_change(args: dict) -> dict:
     return {"event_id": event_id}
 
 
+def tool_route_intent(args: dict) -> dict:
+    """Classify, but never execute, a cross-page request from the global butler."""
+    allowed = {"studio", "dj", "library", "butler_direct", "ask_user"}
+    target = str(args.get("target") or "ask_user")
+    if target not in allowed:
+        raise ValueError(f"target must be one of: {', '.join(sorted(allowed))}")
+    confidence = max(0.0, min(1.0, float(args.get("confidence") or 0)))
+    required = [str(item) for item in (args.get("required_context") or []) if str(item).strip()]
+    context = args.get("context") if isinstance(args.get("context"), dict) else {}
+    satisfied = True
+    missing: list[str] = []
+    if target == "studio":
+        if context.get("workspace") != "studio":
+            missing.append("studio")
+        if not context.get("projectId"):
+            missing.append("projectId")
+    elif target == "dj":
+        if context.get("workspace") != "dj":
+            missing.append("dj")
+        if not context.get("setId"):
+            missing.append("setId")
+    elif target == "library":
+        if context.get("workspace") != "library":
+            missing.append("library")
+    satisfied = not missing
+    return {
+        "accept": True,
+        "target": target,
+        "action_summary": str(args.get("action_summary") or "").strip(),
+        "required_context": required,
+        "confidence": confidence,
+        "context_satisfied": satisfied,
+        "missing_context": missing,
+    }
+
+
 TOOLS = {
     "report_done": (tool_report_done, "一个工作区干完活后的回执（谁、什么、结果、文件、≤3 个数字）。"),
     "recent_events": (tool_recent_events, "按 id 拉事件明细（管家要细节时才用）。"),
     "situation_report": (tool_situation_report, "随时汇报：最近关键事件、未解决的问题、活跃的工作区。"),
     "focus_change": (tool_focus_change, "记录焦点变化（切页面/切工程/选中片段）。"),
+    "route_intent": (tool_route_intent, "全局管家分类一次请求应交给 Studio、DJ、曲库还是自己回答；纯分类，绝不执行副作用。"),
 }
 SCHEMAS = {
     "report_done": {"type": "object", "properties": {"job_id": {"type": "string"}, "type": {"type": "string"}, "actor": {"type": "string"}, "object_id": {"type": "string"}, "outcome": {"type": "string"}, "file": {"type": "string"}, "metrics": {"type": "object"}, "injectable": {"type": "boolean"}}, "required": ["actor"]},
     "recent_events": {"type": "object", "properties": {"since_id": {"type": "integer"}, "limit": {"type": "integer"}}},
     "situation_report": {"type": "object", "properties": {"workspace_id": {"type": "string"}}},
     "focus_change": {"type": "object", "properties": {"workspace": {"type": "string"}, "object_id": {"type": "string"}, "object_type": {"type": "string"}, "actor": {"type": "string"}}},
+    "route_intent": {
+        "type": "object",
+        "properties": {
+            "target": {"type": "string", "enum": ["studio", "dj", "library", "butler_direct", "ask_user"]},
+            "action_summary": {"type": "string"},
+            "required_context": {"type": "array", "items": {"type": "string"}},
+            "confidence": {"type": "number"},
+            "context": {"type": "object"},
+        },
+        "required": ["target", "action_summary", "confidence"],
+    },
 }
 
 

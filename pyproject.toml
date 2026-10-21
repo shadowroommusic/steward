@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "steward"
-version = "0.1.0"
-description = "管家账本（ShadowRoom Music）：工作区回执 + 情况汇报的事件账本"
+version = "0.2.0"
+description = "管家账本（ShadowRoom Music）：工作区回执 + 情况汇报 + 可持久幂等交接的事件账本"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.9"
 license = { text = "AGPL-3.0-only" }
-keywords = ["mcp", "ledger", "events", "shadowroom"]
+keywords = ["mcp", "ledger", "events", "handoff", "shadowroom"]
 dependencies = []
 
 [project.urls]

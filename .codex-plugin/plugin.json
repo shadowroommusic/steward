@@ -1,7 +1,7 @@
 {
   "name": "steward",
-  "version": "0.1.0+codex.20260918000000",
-  "description": "管家账本：工作区回执 + 情况汇报的事件账本（ShadowRoom Music）",
+  "version": "0.2.0+codex.20261021000000",
+  "description": "管家账本：工作区回执 + 情况汇报 + 可持久幂等交接（ShadowRoom Music）",
   "author": {
     "name": "ShadowRoom Music",
     "email": "support@shadowroom.cn",
@@ -10,14 +10,14 @@
   "homepage": "https://shadowroom.cn",
   "repository": "https://github.com/shadowroommusic/steward",
   "license": "AGPL-3.0",
-  "keywords": ["mcp", "ledger", "events", "orb", "butler", "shadowroom"],
+  "keywords": ["mcp", "ledger", "events", "orb", "butler", "handoff", "idempotency", "shadowroom"],
   "interface": {
     "displayName": "管家账本",
-    "shortDescription": "悬浮球（管家）的记事本：工作区只交回执，管家随时汇报。",
-    "longDescription": "只增不改的事件账本：report_done 收工作区回执，recent_events 拉明细，situation_report 汇报最近关键事件/未解决的问题/活跃工作区，focus_change 记录切页面与切工程。injectable=false 的进度事件进日志不进简报，保证管家的上下文有界。账本在 ~/Documents/ShadowRoom/_steward/ledger.db。",
+    "shortDescription": "悬浮球（管家）的记事本：工作区只交回执，管家随时汇报，活可持久交接。",
+    "longDescription": "只增不改的事件账本 + 一套可持久、可幂等、可追踪的交接协议。report_done 收工作区回执，recent_events 拉明细，situation_report 汇报最近关键事件/未解决的问题/活跃工作区并带上有界的交接段落，focus_change 记录切页面与切工程，route_intent 只做分类绝不写库。交接五个工具：handoff_create（idempotency_key 唯一，重复点击只留同一条，附件不丢）、handoff_claim（原子认领，抢输方拿当前状态与 claimed=false）、handoff_finish（只有认领者能写，终态幂等，非法回退拒绝）、handoff_get、handoff_list（有界摘要）。injectable=false 的进度事件进日志不进简报，保证管家的上下文有界。账本在 ~/Documents/ShadowRoom/_steward/ledger.db，迁移按版本号幂等执行。",
     "developerName": "ShadowRoom Music",
     "category": "Music",
-    "capabilities": ["ledger", "events", "situation-report"],
+    "capabilities": ["ledger", "events", "situation-report", "handoff", "idempotency"],
     "websiteURL": "https://shadowroom.cn/tools",
     "brandColor": "#0B0B0F",
     "defaultPrompt": "现在什么情况？"

@@ -30,7 +30,7 @@ brief. Only events that answer a question get injected.
 | `recent_events` | `since_id?`, `limit?` (1–200, default 20) | Pull event detail on demand — the orb asks for specifics. |
 | `situation_report` | `workspace_id?` | What is going on right now: recent key events, unresolved failures, which actors are moving, the bounded handoff section, plus `last_injected_event_id`. |
 | `focus_change` | `workspace?`, `object_id?`, `object_type?`, `actor?` | Page / project / selection changes are events too — that is how the orb knows where you are after you switch. |
-| `route_intent` | `target`, `action_summary`, `confidence` (required), `required_context?`, `context?` | Classify a request for Studio / DJ / library / the butler itself. **Pure classification — never writes anything.** |
+| `app_command` | `op` (`navigate`\|`dispatch`, required), `view?`, `route?`, `reason?` | The butler's one typed command entry. `navigate` changes only the active app view; `dispatch` validates a Studio / DJ / library task. **Pure validation — never writes anything.** |
 | `handoff_create` | `target` (`studio`\|`dj`\|`library`), `instruction`, `idempotency_key` (required), `attachments?`, `source_session_id?`, `context?` | Create a durable handoff. The same `idempotency_key` always returns the same handoff — a double click never creates a second one. |
 | `handoff_claim` | `handoff_id`, `worker_session_id` (required) | Take ownership: `pending` → `claimed`. If another worker got there first, you get the current state and `claimed: false`. |
 | `handoff_finish` | `handoff_id`, `worker_session_id`, `status` (`done`\|`failed`\|`cancelled`) (required), `outcome?`, `metrics?`, `error?` | Close a handoff. Only the claiming worker may write; the terminal state is idempotent; an illegal rewrite is refused. |
@@ -39,7 +39,7 @@ brief. Only events that answer a question get injected.
 
 ## Handoffs
 
-`route_intent` says *what* the request is. A handoff is the request **handed over**: it
+`app_command` says *what the user wants*. A handoff is a dispatch **handed over**: it
 survives a reload, it remembers which worker owns it, and it can be asked about again later.
 
 ```
@@ -83,7 +83,7 @@ first rule is to store pointers, not content.
   progress events that belong in the log but not in the brief.
 - **Events and handoffs are two truths.** Events are what *happened*; handoffs are what is
   *still to be done*. One table would make every row ambiguous, so there are two.
-- **`route_intent` never has side effects.** It classifies; creating or claiming a handoff is
+- **`app_command` never has side effects.** It validates a closed enum of app actions; creating or claiming a handoff is
   a separate, explicit step.
 
 ## Wire it up

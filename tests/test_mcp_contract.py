@@ -20,7 +20,7 @@ class McpContractTest(StewardTestCase):
             "recent_events",
             "situation_report",
             "focus_change",
-            "route_intent",
+            "app_command",
             "handoff_create",
             "handoff_claim",
             "handoff_finish",
@@ -70,7 +70,7 @@ class McpContractTest(StewardTestCase):
     def test_initialize_reports_the_server_version(self):
         result = mcp_server.handle({"method": "initialize"})
         self.assertEqual(result["serverInfo"]["name"], "steward")
-        self.assertEqual(result["serverInfo"]["version"], "0.2.0")
+        self.assertEqual(result["serverInfo"]["version"], "0.3.0")
 
     def test_unknown_method_raises(self):
         with self.assertRaises(ValueError):

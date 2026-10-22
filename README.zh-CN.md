@@ -24,7 +24,7 @@ Studio / DJ / 曲库，就写一条**可持久、可幂等、可追踪**的交�
 | `recent_events` | `since_id?`、`limit?`（1–200，默认 20） | 按 id 拉明细——管家要细节时才用 |
 | `situation_report` | `workspace_id?` | 随时汇报：最近关键事件、未解决的问题、谁在动，加上有界的交接段落，外加 `last_injected_event_id` |
 | `focus_change` | `workspace?`、`object_id?`、`object_type?`、`actor?` | 切页面 / 切工程 / 选中片段也是事件——管家因此知道你现在在哪 |
-| `route_intent` | `target`、`action_summary`、`confidence`（必填）、`required_context?`、`context?` | 分类这次请求该交给 Studio / DJ / 曲库还是管家自己。**纯分类，不写任何东西** |
+| `app_command` | `op`（`navigate`\|`dispatch`，必填）、`view?`、`route?`、`reason?` | 管家唯一的类型化命令入口。`navigate` 只切 App 页面；`dispatch` 校验交给 Studio / DJ / 曲库的任务。**纯校验，不写任何东西** |
 | `handoff_create` | `target`（`studio`\|`dj`\|`library`）、`instruction`、`idempotency_key`（必填）、`attachments?`、`source_session_id?`、`context?` | 建一条可持久交接。同一个 `idempotency_key` 永远拿回同一条——重复点击不会建出第二条 |
 | `handoff_claim` | `handoff_id`、`worker_session_id`（必填） | 认领：`pending` → `claimed`。被别人先认领就返回当前状态与 `claimed: false` |
 | `handoff_finish` | `handoff_id`、`worker_session_id`、`status`（`done`\|`failed`\|`cancelled`）（必填）、`outcome?`、`metrics?`、`error?` | 交回终态。只有认领者能写；终态幂等；非法回退拒绝 |
@@ -33,7 +33,7 @@ Studio / DJ / 曲库，就写一条**可持久、可幂等、可追踪**的交�
 
 ## 交接（handoff）
 
-`route_intent` 只回答"这是什么请求"。**交接**才是真的把活交出去：刷新页面不丢、
+`app_command` 只回答"用户想看哪页，或想做什么"。**交接**才是把 dispatch 真正交出去：刷新页面不丢、
 知道归谁、事后还能再问一遍。
 
 ```
@@ -71,7 +71,7 @@ pending ──claim──▶ claimed ──claim(同一 worker)──▶ running
 - **有界注入**：`metrics` 只保留前三个键；`injectable=false` 标记"进日志但不进简报"的进度事件。
 - **事件与交接待遇是两条真相**：事件是"**发生过**的事"，交接是"**还没做完**的事"。
   放一张表，每一行都会变成"到底是发生过还是没做"的二义。
-- **`route_intent` 没有副作用**：它只分类；要真的建一条交接或认领一条交接，是另外一步、显式的动作。
+- **`app_command` 没有副作用**：它只校验封闭枚举里的 App 动作；要真的建一条交接或认领一条交接，是另外一步、显式的动作。
 
 ## 怎么接
 

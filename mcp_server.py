@@ -17,6 +17,7 @@ handoff 是"**还没做完**的事"（有待认领、有归属、有终态、要
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -80,6 +81,10 @@ MIGRATIONS = (
 # handoff 协议常量：边界写死在这里，工具层不再各自解释一遍。
 # --------------------------------------------------------------------------------------
 HANDOFF_TARGETS = ("studio", "dj", "library")
+APP_VIEWS = ("workbench", "conversation", "plugins", "studio", "dj", "library", "settings")
+APP_COMMAND_OPS = ("navigate", "dispatch")
+APP_COMMAND_KEYS = {"op", "view", "route", "reason"}
+DISPATCH_ROUTE_KEYS = {"target", "action_summary", "confidence", "required_context", "context"}
 HANDOFF_STATUSES = ("pending", "claimed", "running", "done", "failed", "cancelled")
 TERMINAL_STATUSES = ("done", "failed", "cancelled")
 ACTIVE_STATUSES = ("pending", "claimed", "running")
@@ -265,13 +270,24 @@ def tool_focus_change(args: dict) -> dict:
     return {"event_id": event_id}
 
 
-def tool_route_intent(args: dict) -> dict:
-    """Classify, but never execute, a cross-page request from the global butler."""
-    allowed = {"studio", "dj", "library", "butler_direct", "ask_user"}
-    target = str(args.get("target") or "ask_user")
-    if target not in allowed:
-        raise ValueError(f"target must be one of: {', '.join(sorted(allowed))}")
-    confidence = max(0.0, min(1.0, float(args.get("confidence") or 0)))
+def validate_dispatch_route(args: dict) -> dict:
+    """Validate the domain-work half of an app command without executing it."""
+    extra = set(args) - DISPATCH_ROUTE_KEYS
+    if extra:
+        raise ValueError(f"route has unknown fields: {', '.join(sorted(extra))}")
+    target = str(args.get("target") or "")
+    if target not in HANDOFF_TARGETS:
+        raise ValueError(f"route.target must be one of: {', '.join(HANDOFF_TARGETS)}")
+    action_summary = str(args.get("action_summary") or "").strip()
+    if not action_summary:
+        raise ValueError("route.action_summary must not be empty")
+    try:
+        confidence = float(args.get("confidence") or 0)
+    except (TypeError, ValueError):
+        raise ValueError("route.confidence must be a number") from None
+    if not math.isfinite(confidence):
+        raise ValueError("route.confidence must be finite")
+    confidence = max(0.0, min(1.0, confidence))
     required = [str(item) for item in (args.get("required_context") or []) if str(item).strip()]
     context = args.get("context") if isinstance(args.get("context"), dict) else {}
     satisfied = True
@@ -293,11 +309,50 @@ def tool_route_intent(args: dict) -> dict:
     return {
         "accept": True,
         "target": target,
-        "action_summary": str(args.get("action_summary") or "").strip(),
+        "action_summary": action_summary,
         "required_context": required,
         "confidence": confidence,
         "context_satisfied": satisfied,
         "missing_context": missing,
+    }
+
+
+def tool_app_command(args: dict) -> dict:
+    """Validate one typed butler command; the app remains the only executor."""
+    extra = set(args) - APP_COMMAND_KEYS
+    if extra:
+        raise ValueError(f"app_command has unknown fields: {', '.join(sorted(extra))}")
+    op = str(args.get("op") or "")
+    if op not in APP_COMMAND_OPS:
+        raise ValueError(f"op must be one of: {', '.join(APP_COMMAND_OPS)}")
+    reason = str(args.get("reason") or "").strip()
+    if len(reason) > 120:
+        raise ValueError("reason is longer than 120 characters")
+
+    if op == "navigate":
+        if "route" in args:
+            raise ValueError("navigate does not accept route")
+        view = str(args.get("view") or "")
+        if view not in APP_VIEWS:
+            raise ValueError(f"view must be one of: {', '.join(APP_VIEWS)}")
+        return {
+            "accept": True,
+            "op": "navigate",
+            "view": view,
+            "reason": reason or f"打开 {view}",
+        }
+
+    if "view" in args:
+        raise ValueError("dispatch does not accept view")
+    route_args = args.get("route")
+    if not isinstance(route_args, dict):
+        raise ValueError("dispatch requires a route object")
+    route = validate_dispatch_route(route_args)
+    return {
+        "accept": True,
+        "op": "dispatch",
+        "route": route,
+        "reason": reason or route["action_summary"],
     }
 
 
@@ -605,7 +660,10 @@ TOOLS = {
     "recent_events": (tool_recent_events, "按 id 拉事件明细（管家要细节时才用）。"),
     "situation_report": (tool_situation_report, "随时汇报：最近关键事件、未解决的问题、活跃的工作区。"),
     "focus_change": (tool_focus_change, "记录焦点变化（切页面/切工程/选中片段）。"),
-    "route_intent": (tool_route_intent, "全局管家分类一次请求应交给 Studio、DJ、曲库还是自己回答；纯分类，绝不执行副作用。"),
+    "app_command": (
+        tool_app_command,
+        "管家唯一的 App 命令入口：navigate 只切页面，dispatch 把领域任务交给 Studio/DJ/曲库；只校验，绝不执行副作用。",
+    ),
     "handoff_create": (tool_handoff_create, "建一条可持久、可幂等的交接：同一个 idempotency_key 重复提交只会得到同一条 handoff。"),
     "handoff_claim": (tool_handoff_claim, "认领一条交接（pending→claimed）；被别人先认领就返回当前状态与 claimed=false。"),
     "handoff_finish": (tool_handoff_finish, "交回交接终态（done/failed/cancelled）；只有认领者能写，终态幂等，非法回退拒绝。"),
@@ -617,16 +675,27 @@ SCHEMAS = {
     "recent_events": {"type": "object", "properties": {"since_id": {"type": "integer"}, "limit": {"type": "integer"}}},
     "situation_report": {"type": "object", "properties": {"workspace_id": {"type": "string"}}},
     "focus_change": {"type": "object", "properties": {"workspace": {"type": "string"}, "object_id": {"type": "string"}, "object_type": {"type": "string"}, "actor": {"type": "string"}}},
-    "route_intent": {
+    "app_command": {
         "type": "object",
+        "additionalProperties": False,
         "properties": {
-            "target": {"type": "string", "enum": ["studio", "dj", "library", "butler_direct", "ask_user"]},
-            "action_summary": {"type": "string"},
-            "required_context": {"type": "array", "items": {"type": "string"}},
-            "confidence": {"type": "number"},
-            "context": {"type": "object"},
+            "op": {"type": "string", "enum": list(APP_COMMAND_OPS)},
+            "view": {"type": "string", "enum": list(APP_VIEWS)},
+            "route": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "target": {"type": "string", "enum": list(HANDOFF_TARGETS)},
+                    "action_summary": {"type": "string"},
+                    "required_context": {"type": "array", "items": {"type": "string"}},
+                    "confidence": {"type": "number"},
+                    "context": {"type": "object"},
+                },
+                "required": ["target", "action_summary", "confidence"],
+            },
+            "reason": {"type": "string"},
         },
-        "required": ["target", "action_summary", "confidence"],
+        "required": ["op"],
     },
     "handoff_create": {
         "type": "object",
@@ -683,7 +752,7 @@ SCHEMAS = {
 def handle(request: dict):
     method = request.get("method")
     if method == "initialize":
-        return {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "steward", "version": "0.2.0"}}
+        return {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "steward", "version": "0.3.0"}}
     if method == "tools/list":
         return {"tools": [{"name": name, "description": doc, "inputSchema": SCHEMAS[name]} for name, (_, doc) in TOOLS.items()]}
     if method == "tools/call":

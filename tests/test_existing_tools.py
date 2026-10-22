@@ -1,4 +1,4 @@
-"""老工具不回退：report_done / recent_events / focus_change / route_intent。"""
+"""老工具不回退，app_command 成为管家唯一的命令入口。"""
 
 import os
 import sys
@@ -49,35 +49,61 @@ class ExistingToolsTest(StewardTestCase):
         self.assertEqual(events["events"][0]["type"], "focus.change")
         self.assertEqual(events["events"][0]["payload"]["metrics"], {"workspace": "studio"})
 
-    def test_route_intent_classifies_without_touching_the_ledger(self):
+    def test_navigate_is_a_side_effect_free_typed_command(self):
         before_events = self.count_rows("events")
         before_handoffs = self.count_rows("handoffs")
-        result = mcp_server.tool_route_intent(
+        result = mcp_server.tool_app_command(
             {
-                "target": "studio",
-                "action_summary": "把这段旋律铺成 demo",
-                "confidence": 0.92,
-                "required_context": ["projectId"],
-                "context": {"workspace": "studio", "projectId": "project_3"},
+                "op": "navigate",
+                "view": "studio",
+                "reason": "打开 Studio",
             }
         )
-        self.assertEqual(result["target"], "studio")
-        self.assertTrue(result["context_satisfied"])
-        self.assertEqual(result["missing_context"], [])
-        self.assertEqual(result["confidence"], 0.92)
+        self.assertEqual(result["op"], "navigate")
+        self.assertEqual(result["view"], "studio")
         # 纯分类：一个字节都不许写。
         self.assertEqual(self.count_rows("events"), before_events)
         self.assertEqual(self.count_rows("handoffs"), before_handoffs)
 
-    def test_route_intent_reports_missing_context(self):
-        result = mcp_server.tool_route_intent(
-            {"target": "dj", "action_summary": "接下一首", "confidence": 0.8, "context": {}}
+    def test_dispatch_wraps_the_validated_domain_route(self):
+        result = mcp_server.tool_app_command(
+            {
+                "op": "dispatch",
+                "route": {
+                    "target": "dj",
+                    "action_summary": "接下一首",
+                    "confidence": 0.8,
+                    "context": {},
+                },
+            }
         )
-        self.assertFalse(result["context_satisfied"])
-        self.assertEqual(sorted(result["missing_context"]), ["dj", "setId"])
+        self.assertEqual(result["op"], "dispatch")
+        self.assertEqual(result["route"]["target"], "dj")
+        self.assertFalse(result["route"]["context_satisfied"])
+        self.assertEqual(sorted(result["route"]["missing_context"]), ["dj", "setId"])
 
-    def test_route_intent_rejects_an_unknown_target(self):
+    def test_app_command_rejects_unknown_view_and_free_form_fields(self):
         with self.assertRaises(ValueError):
-            mcp_server.tool_route_intent(
-                {"target": "producer-tools", "action_summary": "x", "confidence": 0.5}
+            mcp_server.tool_app_command({"op": "navigate", "view": "producer-tools"})
+        with self.assertRaises(ValueError):
+            mcp_server.tool_app_command(
+                {"op": "navigate", "view": "studio", "selector": ".sr-dock"}
+            )
+
+    def test_app_command_rejects_cross_wired_navigate_and_dispatch_shapes(self):
+        with self.assertRaises(ValueError):
+            mcp_server.tool_app_command(
+                {"op": "navigate", "view": "studio", "route": {"target": "studio"}}
+            )
+        with self.assertRaises(ValueError):
+            mcp_server.tool_app_command(
+                {
+                    "op": "dispatch",
+                    "view": "studio",
+                    "route": {
+                        "target": "studio",
+                        "action_summary": "做一段鼓",
+                        "confidence": 0.9,
+                    },
+                }
             )
